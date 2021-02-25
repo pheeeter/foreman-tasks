@@ -216,11 +216,24 @@ namespace :foreman_tasks do
         end
       end
 
+      def self.count_duration(task)
+        duration = nil
+        if task.started_at && task.ended_at
+          duration = (task.ended_at - task.started_at).floor
+        elsif task.started_at && task.ended_at.nil?
+          duration = (Time.now - task.started_at).floor
+        else
+          duration = "N/A"
+        end
+        return duration
+      end
+
       def self.generate_index(tasks)
         html = '<div><table class="table">'
         tasks.order('started_at desc').all.each do |task|
+          duration = count_duration(task)
           html << "<tr><td><a href=\"#{task.id}.html\">#{task.label}</a></td><td>#{task.started_at}</td>\
-                   <td>#{task.state}</td><td>#{task.result}</td></tr>"
+                   <td>#{duration}</td><td>#{task.state}</td><td>#{task.result}</td></tr>"
         end
         html << '</table></div>'
       end
@@ -263,10 +276,11 @@ namespace :foreman_tasks do
       end
     elsif format == 'csv'
       CSV.open(export_filename, 'wb') do |csv|
-        csv << %w[id state type label result parent_task_id started_at ended_at]
+        csv << %w[id state type label result parent_task_id started_at ended_at duration]
         tasks.find_each do |task|
+          duration = PageHelper.count_duration(task)
           csv << [task.id, task.state, task.type, task.label, task.result,
-                  task.parent_task_id, task.started_at, task.ended_at]
+                  task.parent_task_id, task.started_at, task.ended_at, duration]
         end
       end
     end
