@@ -216,24 +216,11 @@ namespace :foreman_tasks do
         end
       end
 
-      def self.count_duration(task)
-        duration = nil
-        if task.started_at && task.ended_at
-          duration = (task.ended_at - task.started_at).floor
-        elsif task.started_at && task.ended_at.nil?
-          duration = (Time.now - task.started_at).floor
-        else
-          duration = "N/A"
-        end
-        return duration
-      end
-
       def self.generate_index(tasks)
         html = '<div><table class="table">'
         tasks.order('started_at desc').all.each do |task|
-          duration = count_duration(task)
           html << "<tr><td><a href=\"#{task.id}.html\">#{task.label}</a></td><td>#{task.started_at}</td>\
-                   <td>#{duration}</td><td>#{task.state}</td><td>#{task.result}</td></tr>"
+                   <td>#{task.duration}</td><td>#{task.state}</td><td>#{task.result}</td></tr>"
         end
         html << '</table></div>'
       end
@@ -254,16 +241,16 @@ namespace :foreman_tasks do
     format = ENV['TASK_FORMAT'] || 'html'
     export_filename = ENV['TASK_FILE'] || "/tmp/task-export-#{Time.now.to_i}.#{format == 'csv' ? 'csv' : 'tar.gz'}"
 
-    tasks = ForemanTasks::Task.search_for(filter)
+    tasks = ForemanTasks::Task.search_for(filter).with_duration.distinct
 
     puts _("Exporting all tasks matching filter #{filter}")
-    puts _("Gathering #{tasks.count} tasks.")
+    puts _("Gathering #{tasks.count(:all)} tasks.")
     if format == 'html'
       Dir.mktmpdir('task-export') do |tmp_dir|
         PageHelper.copy_assets(tmp_dir)
 
         renderer = TaskRender.new
-        total = tasks.count
+        total = tasks.count(:all)
 
         tasks.find_each.with_index do |task, count|
           File.open(File.join(tmp_dir, "#{task.id}.html"), 'w') { |file| file.write(PageHelper.pagify(renderer.render_task(task))) }
@@ -278,9 +265,8 @@ namespace :foreman_tasks do
       CSV.open(export_filename, 'wb') do |csv|
         csv << %w[id state type label result parent_task_id started_at ended_at duration]
         tasks.find_each do |task|
-          duration = PageHelper.count_duration(task)
           csv << [task.id, task.state, task.type, task.label, task.result,
-                  task.parent_task_id, task.started_at, task.ended_at, duration]
+                  task.parent_task_id, task.started_at, task.ended_at, task.duration]
         end
       end
     end
